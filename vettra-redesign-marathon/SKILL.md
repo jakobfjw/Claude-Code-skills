@@ -41,6 +41,10 @@ TIER 4: FIX AGENTS (one per bug)
 
 **Why this works:** Each sub-agent gets a FRESH context window. The coordinator's context stays tiny because it never reads files or processes screenshots. A 50-screen conversion costs the coordinator ~10K tokens total, leaving massive headroom for tracking and orchestration.
 
+**CRITICAL: Sub-agent model override.** The global config may set sub-agents to Haiku. Haiku is too small for screen conversions and aesthetic decisions. **ALWAYS specify `model: sonnet` on every Agent tool call** for conversion and verification agents. Fix agents can use the default (Haiku is fine for small fixes).
+
+**CRITICAL: Commit AND push.** Every commit must be followed by `git push origin main`. Sub-agents commit AND push. The coordinator commits AND pushes checkpoints. Nothing stays local-only.
+
 ---
 
 ## CRITICAL CONTEXT -- Embedded in Every Agent Prompt
@@ -204,7 +208,7 @@ You are designed to run for hours across multiple sessions. Context exhaustion i
 1. Finish current screen's agent result processing
 2. Update REDESIGN_TODO.md with exact next action
 3. Write current timestamp to "Last updated"
-4. Commit: `git add REDESIGN_TODO.md && git commit -m "chore: redesign checkpoint"`
+4. Commit and push: `git add REDESIGN_TODO.md && git commit -m "chore: redesign checkpoint" && git push origin main`
 5. STOP. The next `/vettra-redesign-marathon` session resumes automatically.
 
 ---
@@ -343,6 +347,7 @@ Spawn 2-3 widget conversion agents IN PARALLEL (they edit different files, no co
 Agent tool:
   description: "Convert widget [name]"
   subagent_type: general-purpose
+  model: sonnet
   run_in_background: true
   prompt: [WIDGET CONVERSION PROMPT -- see template below]
 ```
@@ -376,7 +381,7 @@ STEPS:
 7. Remove import '../utils/theme.dart' -- add imports for colors.dart and typography.dart
 8. Preserve ALL functionality -- every callback, every parameter, every layout
 9. Run: cd "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend" && flutter analyze lib/widgets/[WIDGET_NAME].dart 2>&1 | tail -20
-10. If 0 errors: git add lib/widgets/[WIDGET_NAME].dart && git commit -m "design: convert [WIDGET_NAME] to Noir"
+10. If 0 errors: git add lib/widgets/[WIDGET_NAME].dart && git commit -m "design: convert [WIDGET_NAME] to Noir" && git push origin main
 11. Report: "CONVERTED: [WIDGET_NAME]" or "FAILED: [reason]"
 
 RULES:
@@ -471,6 +476,7 @@ For each unconverted screen:
 Agent tool:
   description: "Convert [screen_name]"
   subagent_type: general-purpose
+  model: sonnet
   run_in_background: false   <-- WAIT for result
   prompt: |
     You are a Vettra Screen Conversion Agent. Convert one screen to the Noir aesthetic.
@@ -487,18 +493,18 @@ Agent tool:
        Note every: provider (ref.watch/ref.read), navigation (Navigator.push), tap handler, API call, data model
     3. Read the NEW screen file (in vettra-newfrontend) -- this is what you're converting
     4. IMPORTANT: Before you start converting, invoke the frontend-design skill (use the Skill tool with skill: "frontend-design") to get aesthetic guidance for this specific screen. Describe the screen's purpose and content, and ask how to apply the Noir design system with taste and intention. Follow its guidance for spatial composition, typography hierarchy, and color usage.
-    4. Rewrite the screen:
+    5. Rewrite the screen:
        - Replace ALL AppTheme.xxx and hardcoded colors with NoirColors tokens
        - Replace ALL inline TextStyle/GoogleFonts with NoirTypography.xxx
        - Remove ALL BoxShadow -- use Border.all(color: c.border)
        - Remove import '../utils/theme.dart' -- add theme/colors.dart + theme/typography.dart
        - Apply the frontend-design guidance for layout, spacing, visual hierarchy
        - KEEP every provider, every navigation, every tap handler, every API call IDENTICAL
-    5. Run: cd "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend" && flutter analyze lib/screens/[SCREEN_NAME].dart 2>&1 | tail -20
-    6. Fix any analysis errors
-    7. Run flutter analyze again -- must be 0 errors
-    8. git add lib/screens/[SCREEN_NAME].dart && git commit -m "design: convert [SCREEN_NAME] to Noir aesthetic"
-    9. Report: "CONVERTED: [SCREEN_NAME]" with a 2-sentence summary of what changed
+    6. Run: cd "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend" && flutter analyze lib/screens/[SCREEN_NAME].dart 2>&1 | tail -20
+    7. Fix any analysis errors
+    8. Run flutter analyze again -- must be 0 errors
+    9. git add lib/screens/[SCREEN_NAME].dart && git commit -m "design: convert [SCREEN_NAME] to Noir aesthetic" && git push origin main
+    10. Report: "CONVERTED: [SCREEN_NAME]" with a 2-sentence summary of what changed
        OR: "FAILED: [reason]" if you couldn't complete the conversion
 
     ABSOLUTE RULES:
@@ -534,6 +540,7 @@ After successful conversion, spawn a verification agent:
 Agent tool:
   description: "Verify [screen_name]"
   subagent_type: general-purpose
+  model: sonnet
   run_in_background: true   <-- Run in background, continue to next screen
   prompt: |
     You are a Vettra Verification Agent. Test a converted screen using Playwright.
@@ -590,7 +597,7 @@ After every 3 screens:
 1. Update REDESIGN_TODO.md with all results
 2. Run: `cd "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend" && flutter analyze 2>&1 | tail -20`
 3. If errors: spawn fix agent
-4. Commit: `git add REDESIGN_TODO.md && git commit -m "chore: redesign checkpoint -- N/M screens done"`
+4. Commit and push: `git add REDESIGN_TODO.md && git commit -m "chore: redesign checkpoint -- N/M screens done" && git push origin main`
 5. Append to Progress Log in REDESIGN_TODO.md
 
 After 8-10 screens: SERIOUSLY consider stopping (update NEXT ACTION and let next session continue). Context health > completing one more screen.
@@ -605,6 +612,7 @@ After ALL screens are converted, do a comprehensive walkthrough. Spawn ONE large
 Agent tool:
   description: "Full app walkthrough"
   subagent_type: general-purpose
+  model: sonnet
   run_in_background: false
   prompt: |
     You are a Vettra Full Walkthrough Agent. Test the entire app using Playwright.
@@ -715,7 +723,7 @@ Agent tool:
     1. Read the file
     2. Make the MINIMAL fix (only change what's broken)
     3. Run: flutter analyze [file] 2>&1 | tail -10
-    4. If 0 errors: git add [file] && git commit -m "fix: [description]"
+    4. If 0 errors: git add [file] && git commit -m "fix: [description]" && git push origin main
     5. Report: "FIXED: [what changed]" or "FAILED: [reason]"
 
     RULES: Never ask questions. Minimal changes only. No refactoring.
