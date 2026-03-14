@@ -50,6 +50,8 @@ TIER 4: FIX AGENTS (one per bug)
 - **OLD APP**: `/Users/jakobwredstrom/Desktop/Vetra App/vettra-app/`
 - **NEW APP**: `/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/`
 - **Package name**: `concept_e_noir`
+- **Brand guide**: `/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/BRAND.md` -- authoritative design reference
+- **CLAUDE.md**: `/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/CLAUDE.md` -- project architecture + rules
 
 ### Run Commands
 
@@ -364,7 +366,8 @@ OLD APP REFERENCE: /Users/jakobwredstrom/Desktop/Vetra App/vettra-app/lib/widget
 [PASTE THE ENTIRE DESIGN SYSTEM REFERENCE BLOCK FROM ABOVE]
 
 STEPS:
-1. Read the widget file in the NEW app: lib/widgets/[WIDGET_NAME].dart
+1. Read the BRAND GUIDE first: /Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/BRAND.md
+2. Read the widget file in the NEW app: lib/widgets/[WIDGET_NAME].dart
 2. Read the SAME widget in the OLD app (if it exists) for functional reference
 3. Convert ALL colors to NoirColors.of(context) tokens
 4. Convert ALL text styles to NoirTypography.xxx
@@ -479,10 +482,11 @@ Agent tool:
     [PASTE THE ENTIRE DESIGN SYSTEM REFERENCE BLOCK]
 
     YOUR PROCESS:
-    1. Read the OLD screen file (in vettra-app) -- this is the source of truth for functionality
+    1. Read the BRAND GUIDE: /Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/BRAND.md -- this is the authoritative design reference with all color tokens, typography rules, component patterns, and absolute rules
+    2. Read the OLD screen file (in vettra-app) -- this is the source of truth for functionality
        Note every: provider (ref.watch/ref.read), navigation (Navigator.push), tap handler, API call, data model
-    2. Read the NEW screen file (in vettra-newfrontend) -- this is what you're converting
-    3. IMPORTANT: Before you start converting, invoke the frontend-design skill (use the Skill tool with skill: "frontend-design") to get aesthetic guidance for this specific screen. Describe the screen's purpose and content, and ask how to apply the Noir design system with taste and intention. Follow its guidance for spatial composition, typography hierarchy, and color usage.
+    3. Read the NEW screen file (in vettra-newfrontend) -- this is what you're converting
+    4. IMPORTANT: Before you start converting, invoke the frontend-design skill (use the Skill tool with skill: "frontend-design") to get aesthetic guidance for this specific screen. Describe the screen's purpose and content, and ask how to apply the Noir design system with taste and intention. Follow its guidance for spatial composition, typography hierarchy, and color usage.
     4. Rewrite the screen:
        - Replace ALL AppTheme.xxx and hardcoded colors with NoirColors tokens
        - Replace ALL inline TextStyle/GoogleFonts with NoirTypography.xxx
