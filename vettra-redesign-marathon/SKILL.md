@@ -282,11 +282,19 @@ grep -rl "Colors\." "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/
 grep -rl "AppTheme\.\|Colors\." "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/lib/widgets/" | xargs -I{} basename {} | sort
 ```
 
-### 0.2 Write REDESIGN_TODO.md
+### 0.2 Commit Any Uncommitted Changes
+
+Before starting the marathon, commit any existing uncommitted changes so conversion agents don't accidentally include stale diffs:
+
+```bash
+cd "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend" && git add -A && git diff --cached --quiet || git commit -m "chore: pre-marathon snapshot of uncommitted changes" && git push origin main
+```
+
+### 0.3 Write REDESIGN_TODO.md
 
 Create the full inventory with every screen and widget listed. Mark already-converted items as `S` (skip). Commit immediately.
 
-### 0.3 Start Both Apps
+### 0.4 Start Both Apps
 
 Use Desktop Commander (`start_process`) to launch both apps:
 
@@ -306,7 +314,7 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:3006
 
 If either app shows onboarding/login, you'll need to click through it once using Playwright before verification agents can test screens.
 
-### 0.4 Login Both Apps via Playwright
+### 0.5 Login Both Apps via Playwright
 
 Navigate Playwright to each port. If login screen appears:
 1. Look for "Dev login" or similar dev shortcut
@@ -373,7 +381,7 @@ OLD APP REFERENCE: /Users/jakobwredstrom/Desktop/Vetra App/vettra-app/lib/widget
 STEPS:
 1. Read the BRAND GUIDE first: /Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/BRAND.md
 2. Read the widget file in the NEW app: lib/widgets/[WIDGET_NAME].dart
-2. Read the SAME widget in the OLD app (if it exists) for functional reference
+3. Read the SAME widget in the OLD app (if it exists) for functional reference. NOTE: Some widgets (bottom_nav.dart, film_grain.dart, nav_drawer.dart) only exist in the new app -- skip this step if the old file doesn't exist.
 3. Convert ALL colors to NoirColors.of(context) tokens
 4. Convert ALL text styles to NoirTypography.xxx
 5. Remove ALL shadows -- replace with Border.all(color: c.border)
@@ -489,7 +497,7 @@ Agent tool:
 
     YOUR PROCESS:
     1. Read the BRAND GUIDE: /Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/BRAND.md -- this is the authoritative design reference with all color tokens, typography rules, component patterns, and absolute rules
-    2. Read the OLD screen file (in vettra-app) -- this is the source of truth for functionality
+    2. Read the OLD screen file (in vettra-app) -- this is the source of truth for functionality. NOTE: Some screens (home_feed.dart, ai_coach_screen.dart, app_shell.dart, plans_screen.dart) only exist in the new app -- skip this step if the old file doesn't exist and use the new file as sole reference.
        Note every: provider (ref.watch/ref.read), navigation (Navigator.push), tap handler, API call, data model
     3. Read the NEW screen file (in vettra-newfrontend) -- this is what you're converting
     4. IMPORTANT: Before you start converting, invoke the frontend-design skill (use the Skill tool with skill: "frontend-design") to get aesthetic guidance for this specific screen. Describe the screen's purpose and content, and ask how to apply the Noir design system with taste and intention. Follow its guidance for spatial composition, typography hierarchy, and color usage.
@@ -532,9 +540,16 @@ If agent reports FAILED:
 2. Spawn a fix agent with the specific error
 3. If fix agent also fails: mark as `NEEDS_MANUAL` and move on (max 2 retries per screen)
 
-**Step C -- Dispatch Verification Agent**
+**Step C -- Hot Restart + Dispatch Verification Agent**
 
-After successful conversion, spawn a verification agent:
+After successful conversion, trigger a hot restart so the running app reflects the new code:
+```bash
+# Send 'R' (capital R = hot restart) to the Flutter process stdin
+# If Flutter isn't running interactively, just note that verification may show stale UI
+# The verification agent should reload the page (Ctrl+Shift+R equivalent) as first step
+```
+
+Then spawn a verification agent:
 
 ```
 Agent tool:
@@ -553,7 +568,7 @@ Agent tool:
     Wait 5-8 seconds after navigation for Flutter to fully render.
 
     STEPS:
-    1. Navigate Playwright to http://localhost:3005
+    1. Navigate Playwright to http://localhost:3005 and do a HARD REFRESH (Ctrl+Shift+R or add ?t=[timestamp] query param) to ensure the latest code is loaded
     2. Wait 6 seconds for Flutter to load
     3. Navigate to the [SCREEN_NAME] screen:
        [PROVIDE NAVIGATION INSTRUCTIONS -- e.g., "Click Activities tab at bottom nav, coordinates approximately (x, y)"]
