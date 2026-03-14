@@ -71,6 +71,29 @@ A screen is REDESIGNED when:
 6. It uses the same Riverpod providers, ApiClient, and Firebase Auth as the old app
 7. All interactive elements work identically to the old app
 8. It looks premium, editorial, and intentional -- invoke the frontend-design skill for aesthetic decisions
+9. It imports `'../theme/colors.dart'` and `'../theme/typography.dart'` -- NOT `'../utils/theme.dart'` (AppTheme)
+10. It has NO emojis anywhere in the UI -- the user explicitly hates emojis in the interface
+
+### Screens That Don't Exist Yet in the New App
+
+If a screen exists in the old app but NOT in the new app:
+1. COPY the old screen file to the new app's `lib/screens/` directory
+2. Then convert it to Noir (same as any other unconverted screen)
+3. Make sure its imports point to the new app's providers/models/services (these are already copied)
+
+### Import Migration Checklist
+
+When converting a screen, the sub-agent MUST:
+- REMOVE: `import '../utils/theme.dart';` (old AppTheme bridge)
+- ADD: `import '../theme/colors.dart';` (NoirColors)
+- ADD: `import '../theme/typography.dart';` (NoirTypography)
+- REPLACE: All `AppTheme.primaryAccent` -> `NoirColors.crimson`
+- REPLACE: All `AppTheme.backgroundColor` -> `c.background` (where `c = NoirColors.of(context)`)
+- REPLACE: All `AppTheme.textColor` -> `c.text`
+- REPLACE: All `AppTheme.subtitleColor` -> `c.textMuted`
+- REPLACE: All `AppTheme.cardColor` -> `c.cardBg`
+- REPLACE: All `AppTheme.borderColor` -> `c.border`
+- REPLACE: All `BoxShadow(...)` -> `Border.all(color: c.border)`
 
 ---
 
@@ -231,6 +254,27 @@ IMPORTANT: Flutter web in debug mode uses CanvasKit. Screenshots work but the ac
 
 For EACH unconverted screen, follow this exact procedure:
 
+### Step 2.0 -- Pre-Check: Does the Screen Exist? Are Its Widgets Converted?
+
+**A. Check if screen exists in new app:**
+```bash
+ls "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/lib/screens/[screen_name].dart" 2>/dev/null
+```
+If it does NOT exist, copy it from the old app first:
+```bash
+cp "/Users/jakobwredstrom/Desktop/Vetra App/vettra-app/lib/screens/[screen_name].dart" "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/lib/screens/"
+```
+
+**B. Check which widgets this screen depends on:**
+```bash
+grep "import.*widgets/" "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/lib/screens/[screen_name].dart"
+```
+For each imported widget, check if it's already converted:
+```bash
+grep -c "NoirColors.of" "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/lib/widgets/[widget_name].dart"
+```
+If a widget is NOT converted (returns 0), spawn a widget conversion sub-agent FIRST and wait for it before converting the screen.
+
 ### Step 2.1 -- Read the Old Screen (Reference)
 
 ```
@@ -317,6 +361,9 @@ Agent tool:
     5. NO hardcoded colors -- everything via NoirColors.of(context)
     6. Replace any "STRAVA" text with "VETTRA"
     7. Maintain ConsumerStatefulWidget / ConsumerWidget pattern
+    8. NO EMOJIS in the UI -- the user explicitly hates emojis. Remove any emoji from display text.
+    9. REMOVE `import '../utils/theme.dart'` (old AppTheme) -- replace with `import '../theme/colors.dart'` and `import '../theme/typography.dart'`
+    10. All `AppTheme.xxx` references must be replaced with `NoirColors` / `NoirTypography` equivalents
 
     AESTHETIC GUIDANCE:
     [Insert specific aesthetic notes from frontend-design skill invocation]
@@ -332,31 +379,67 @@ Agent tool:
 
 ### Step 2.5 -- Verify with Playwright (After Sub-Agent Completes)
 
-After the conversion sub-agent reports back, verify the screen with Playwright:
+After the conversion sub-agent reports back, verify the screen with Playwright.
 
-#### A. Visual Check (New App)
+**IMPORTANT: Playwright controls ONE browser page at a time.** To compare old and new apps:
+- Navigate to port 3005 (new app), test, take screenshot
+- Then navigate to port 3006 (old app), test, take screenshot
+- Compare results mentally (you can see both screenshots)
+
+**IMPORTANT: After code changes, restart the Flutter process.** Flutter web hot reload is unreliable. Kill the old process and start a new one:
+```bash
+# Kill old process, start new
+kill [PID] && cd "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend" && flutter run -d chrome --web-port=3005 ...
+```
+Wait 6-8 seconds after navigation for Flutter to fully render before taking screenshots.
+
+#### A. Visual Check -- USE FRONTEND-DESIGN SKILL TO EVALUATE
+
 1. Navigate Playwright to `http://localhost:3005`
-2. Navigate to the converted screen
-3. Take a screenshot
-4. Verify: dark theme colors, no white/bright elements that don't belong, proper typography
+2. Navigate to the converted screen (click through nav)
+3. Take a screenshot with `browser_take_screenshot`
+4. **Invoke the `frontend-design` skill to evaluate the screenshot:**
+   - Does it look premium and intentional?
+   - Are the colors correct (dark bg, cream text, crimson accents)?
+   - Is the typography hierarchy right (Bebas headers, DM Sans body, Cormorant numbers)?
+   - Are there any jarring elements (white cards on dark bg, bright colors that don't belong)?
+   - Does the spatial composition feel balanced and generous?
+   - Are there any leftover old-design elements (shadows, wrong fonts, hardcoded colors)?
+5. If the frontend-design evaluation finds issues -> SPAWN FIX SUB-AGENT with specific aesthetic fixes
 
-#### B. Functional Parity Check
-1. Navigate Playwright to the converted screen on port 3005
-2. Click every interactive element (cards, buttons, rows, tabs)
-3. Verify navigation targets are correct
-4. Verify data is loading from API (not blank, not mock)
+#### B. Functional Parity Check (New App -- port 3005)
+1. Navigate to the converted screen
+2. Click every interactive element (cards, buttons, rows, tabs) using coordinate-based clicks
+3. After each click, take a screenshot to verify the navigation target loaded correctly
+4. Verify data is loading from API (text visible, not blank, not "Loading..." stuck)
+5. Check: do tappable cards navigate to the right detail screens?
+6. Check: do back buttons work?
+7. Check: do tabs switch content correctly?
 
-#### C. Compare with Old App
-1. Navigate Playwright to same screen on port 3006 (old app)
-2. Take a screenshot for reference
-3. Click the same interactive elements
-4. Verify the same behavior: same navigation targets, same data shown
+#### C. Compare with Old App (port 3006)
+1. Navigate Playwright to `http://localhost:3006`
+2. Navigate to the SAME screen in the old app
+3. Take a screenshot for reference
+4. Click the SAME interactive elements in the same order
+5. Verify IDENTICAL behavior: same navigation targets, same data shown, same number of items
+6. If behavior differs -> log the difference and SPAWN FIX SUB-AGENT
 
 #### D. Check Console for Errors
+Use `browser_console_messages` or check the Flutter process output for:
+- Dart assertion errors (e.g., `Assertion failed`, `RangeError`)
+- API errors (e.g., `HTTP 500`, `Failed to load resource`)
+- Rendering errors (e.g., `EXCEPTION CAUGHT BY WIDGETS LIBRARY`)
+- Widget overflow errors (e.g., `RenderFlex overflowed`)
+
+Any error = SPAWN FIX SUB-AGENT immediately.
+
+#### E. Run `flutter analyze` on the Whole Project (every 3-5 screens)
+
+```bash
+cd "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend" && flutter analyze 2>&1 | tail -20
 ```
-browser_console_messages(level: "error")
-```
-Any Dart assertion errors, API errors, or rendering errors = SPAWN FIX SUB-AGENT.
+
+If there are errors in ANY file (not just the screen you converted), spawn a fix sub-agent.
 
 ### Step 2.6 -- Update REDESIGN_TODO.md
 
@@ -373,23 +456,38 @@ Repeat Steps 2.1-2.6 for the next unconverted screen. NEVER stop.
 
 ---
 
-## Phase 3 -- Widget Conversion
+## Phase 3 -- Widget Conversion (Inline + Catch-Up)
 
-Some screens depend on shared widgets that also need Noir conversion. Check each widget:
+Widgets are converted in TWO ways:
 
+### 3A. Inline During Screen Conversion (preferred)
+When converting a screen, check which widgets it imports. If any widget still uses `AppTheme`, convert it FIRST (spawn a sub-agent for the widget before the screen). The screen conversion sub-agent should reference the already-converted widget.
+
+Before converting any screen, run:
 ```bash
-grep -l "AppTheme\." "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/lib/widgets/"*.dart
+# Find which widgets the screen imports
+grep "import.*widgets/" "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/lib/screens/[screen_name].dart"
+# Then check if those widgets are converted
+grep -l "AppTheme\." [each widget file found above]
 ```
 
-For each unconverted widget, spawn a sub-agent to convert it (same pattern as screens).
+### 3B. Catch-Up Sweep (after all screens)
+After all screens are done, sweep for any remaining unconverted widgets:
 
-Key widgets to prioritize:
-- `bottom_nav.dart` / `bottom_nav_scaffold.dart` -- navigation
+```bash
+grep -rl "AppTheme\." "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/lib/widgets/"
+```
+
+For each unconverted widget, spawn a sub-agent (same pattern as screens).
+
+Key widgets to prioritize if not yet converted:
+- `bottom_nav.dart` / `bottom_nav_scaffold.dart` -- navigation (likely already done)
 - `morning_checkin_card.dart` -- home screen
 - `today_workout_card.dart` -- home screen
-- `activity_charts.dart` -- activity detail
+- `activity_charts.dart` -- activity detail (chart colors must use NoirColors)
 - `training_plan_preview.dart` -- plans
 - `chat_message_widget.dart` -- AI coach
+- `navigation_drawer.dart` / `nav_drawer.dart` -- side menu
 
 ---
 
