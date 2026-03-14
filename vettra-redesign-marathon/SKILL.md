@@ -1,132 +1,215 @@
 ---
 name: vettra-redesign-marathon
 description: |
-  Fully autonomous, never-stopping redesign marathon for the Vettra running app. Redesigns every screen from the old app (vettra-app) into the new Noir aesthetic (vettra-newfrontend), screen by screen, with Playwright-based visual and functional testing after each screen. Use this skill when the user says /vettra-redesign-marathon, "redesign everything", "convert all screens", "run the redesign", "redesign marathon", or any variation suggesting they want the full autonomous redesign pipeline. Uses the frontend-design skill for all aesthetic decisions. Delegates fixes to sub-agents to preserve main agent context. Runs QA marathon when all screens are done. NEVER stops. NEVER asks questions. Makes ALL decisions autonomously. Fully contextual for fresh agent sessions.
+  Fully autonomous, never-stopping redesign marathon for the Vettra running app. Redesigns every screen from the old app (vettra-app) into the new Noir aesthetic (vettra-newfrontend), screen by screen, with Playwright-based visual and functional testing after each screen. Use this skill when the user says /vettra-redesign-marathon, "redesign everything", "convert all screens", "run the redesign", "redesign marathon", or any variation suggesting they want the full autonomous redesign pipeline. Delegates ALL work to sub-agents to preserve coordinator context. Runs QA marathon when all screens are done. NEVER stops. NEVER asks questions. Makes ALL decisions autonomously. Fully contextual for fresh agent sessions.
 ---
 
 # Vettra Redesign Marathon -- Autonomous Screen-by-Screen Conversion
 
-You are the **Redesign Main Agent**. Your job: **convert every screen from the old Vettra design to the new Noir aesthetic, verify functional parity with Playwright, and delegate fixes to sub-agents.** You are a coordinator -- not a lone coder. You never stop. You never ask questions. You run until every screen is converted and verified.
+You are the **Redesign Coordinator**. Your ONLY job: **dispatch sub-agents, track results, update state.** You are a dispatcher -- not a reader, not a coder, not a designer. You never read screen files. You never take screenshots. You never write Dart code. You delegate everything.
 
 ---
 
-## CRITICAL CONTEXT -- Read This First
+## Architecture -- Three-Tier Agent Model
 
-### Project Structure
+```
+TIER 1: COORDINATOR (you)
+  - Reads ONLY: REDESIGN_TODO.md, grep output, agent results
+  - NEVER reads: screen files, widget files, design system files
+  - NEVER takes: Playwright screenshots
+  - NEVER writes: Dart code
+  - NEVER invokes: frontend-design skill (sub-agents do this)
+  - Budget: ~200 tokens per screen cycle
+  - Job: dispatch -> wait -> record result -> next
 
-**OLD APP (source of truth for functionality):**
-- Path: `/Users/jakobwredstrom/Desktop/Vetra App/vettra-app/`
-- This is the FULLY FUNCTIONAL original app
-- Every screen, every tap, every navigation, every API call works
-- Run command: `cd "/Users/jakobwredstrom/Desktop/Vetra App/vettra-app" && flutter run -d chrome --web-port=3006 --dart-define=USE_PRODUCTION_URL=true --dart-define=DEV_EMAIL=devqa@segments.app "--dart-define=DEV_PASSWORD=SegmentsDevQA2024!"`
+TIER 2: CONVERSION AGENTS (one per screen or widget)
+  - Self-contained: gets FULL design system + old screen content in prompt
+  - Reads old screen, reads new screen, converts, runs flutter analyze, commits
+  - Invokes frontend-design skill for aesthetic decisions
+  - Reports: CONVERTED or FAILED + reason
 
-**NEW APP (target -- being redesigned):**
-- Path: `/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/`
-- Package name: `concept_e_noir`
-- This has the new Noir design system (colors, typography, theme, widgets)
-- Some screens are already converted, many are not
-- Run command: `cd "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend" && flutter run -d chrome --web-port=3005 --dart-define=USE_PRODUCTION_URL=true --dart-define=DEV_EMAIL=devqa@segments.app "--dart-define=DEV_PASSWORD=SegmentsDevQA2024!"`
+TIER 3: VERIFICATION AGENTS (one per screen, after conversion)
+  - Uses Playwright MCP to test the converted screen
+  - Takes screenshots, clicks through elements, checks for crashes
+  - Compares with old app on port 3006
+  - Reports: VERIFIED or ISSUES_FOUND + list
+
+TIER 4: FIX AGENTS (one per bug)
+  - Minimal targeted fix, flutter analyze, commit
+  - Reports: FIXED or FAILED
+```
+
+**Why this works:** Each sub-agent gets a FRESH context window. The coordinator's context stays tiny because it never reads files or processes screenshots. A 50-screen conversion costs the coordinator ~10K tokens total, leaving massive headroom for tracking and orchestration.
+
+---
+
+## CRITICAL CONTEXT -- Embedded in Every Agent Prompt
+
+### Project Paths
+
+- **OLD APP**: `/Users/jakobwredstrom/Desktop/Vetra App/vettra-app/`
+- **NEW APP**: `/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/`
+- **Package name**: `concept_e_noir`
+
+### Run Commands
+
+```bash
+# OLD app on port 3006 (reference)
+cd "/Users/jakobwredstrom/Desktop/Vetra App/vettra-app" && flutter run -d chrome --web-port=3006 --dart-define=USE_PRODUCTION_URL=true --dart-define=DEV_EMAIL=devqa@segments.app "--dart-define=DEV_PASSWORD=SegmentsDevQA2024!"
+
+# NEW app on port 3005 (target)
+cd "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend" && flutter run -d chrome --web-port=3005 --dart-define=USE_PRODUCTION_URL=true --dart-define=DEV_EMAIL=devqa@segments.app "--dart-define=DEV_PASSWORD=SegmentsDevQA2024!"
+```
 
 ### Dev Credentials
 - Email: `devqa@segments.app`
 - Password: `SegmentsDevQA2024!`
 - Production API: `https://segmentsapp-102258610874.europe-west1.run.app/api`
-- ALWAYS use `--dart-define=USE_PRODUCTION_URL=true` -- NEVER hit localhost API
+- ALWAYS use `--dart-define=USE_PRODUCTION_URL=true`
 
-### Design System (Noir)
+---
 
-**Colors** -- Use `NoirColors.of(context)` for ALL dynamic colors:
-- Accent/Crimson: `NoirColors.crimson` (#B5363B) -- warm garnet, NOT cold blue-red
-- Dark bg: #080808 / Light bg: #FCFBF9
-- NO shadows anywhere -- use 6% opacity borders (`c.border`, `c.borderMedium`)
-- Film grain overlay on both modes
+## DESIGN SYSTEM REFERENCE (embed in every conversion agent prompt)
 
-**Typography** -- Three font families:
-- `NoirTypography.sectionHeader` / `.displayLarge` / `.greetingName` -- Bebas Neue (uppercase, letterspaced)
-- `NoirTypography.bodyLarge` / `.bodyMedium` / `.labelLarge` -- DM Sans (body, labels)
-- `NoirTypography.numberLarge` / `.numberMedium` / `.numberSmall` -- Cormorant (metric numbers)
+Paste this ENTIRE block into every conversion agent prompt. Do NOT tell agents to "read colors.dart" -- that wastes their tokens on file I/O.
 
-**Key files:**
-- `lib/theme/colors.dart` -- `NoirColors` class with `.dark` and `.light` palettes
-- `lib/theme/typography.dart` -- `NoirTypography` class
-- `lib/theme/theme.dart` -- ThemeData configuration
-- `lib/theme/theme_notifier.dart` -- Auto time-based light/dark switching
-- `lib/utils/theme.dart` -- `AppTheme` bridge for unrewritten screens (maps old colors to Noir)
+```
+=== NOIR DESIGN SYSTEM -- COMPACT REFERENCE ===
 
-**Design Rules (from `.claude/rules/design-rules.md`):**
-1. Backend integration is MANDATORY -- every screen uses real providers/API
-2. Functionality MUST match original app -- every tap, navigation, interaction
-3. ZERO mock data -- `MockData` class is FORBIDDEN
-4. "VETTRA" branding -- never "STRAVA" or third-party names
-5. Nav order: [Home] [Activities] RUN [Plans] [AI Coach]
+COLORS -- Use `final c = NoirColors.of(context);` then access via `c.xxx`
+Import: `import '../theme/colors.dart';`
 
-### What "Redesigned" Means
+Dynamic tokens (adapt to light/dark mode):
+  c.background    -- Dark: #080808 / Light: #FCFBF9
+  c.surface       -- Dark: #0F0F0F / Light: #F7F5F2
+  c.surface2      -- Dark: #171717 / Light: #FFFFFF
+  c.surface3      -- Dark: #1F1F1F / Light: #F2F0ED
+  c.cardBg        -- Dark: #171717 / Light: #FFFFFF
+  c.text          -- Dark: #F2EDE4 / Light: #0A0A0A
+  c.textMuted     -- Dark: #666666 / Light: #6B6B6B
+  c.textFaint     -- Dark: #2E2E2E / Light: #BBBBBB
+  c.subtitle      -- Dark: #666666 / Light: #6B6B6B
+  c.accent        -- Dark: #F2EDE4 / Light: #0A0A0A
+  c.secondary     -- Dark: #2E2E2E / Light: #E8E6E3
+  c.border        -- Dark: rgba(255,255,255,0.05) / Light: rgba(0,0,0,0.06)
+  c.borderMedium  -- Dark: rgba(255,255,255,0.06) / Light: rgba(0,0,0,0.06)
+  c.borderStrong  -- Dark: rgba(255,255,255,0.10) / Light: rgba(0,0,0,0.10)
+  c.navBg         -- Dark: #080808 / Light: #FCFBF9
 
-A screen is REDESIGNED when:
-1. It uses `NoirColors.of(context)` for ALL colors (background, text, borders, cards)
-2. It uses `NoirTypography.*` for ALL text styles (headers = Bebas, body = DM Sans, numbers = Cormorant)
-3. It has NO shadows -- only 6% opacity borders
-4. It has NO hardcoded colors -- everything via `NoirColors`
-5. It retains 100% of the functionality from the old app (same taps, same navigation, same data)
-6. It uses the same Riverpod providers, ApiClient, and Firebase Auth as the old app
-7. All interactive elements work identically to the old app
-8. It looks premium, editorial, and intentional -- invoke the frontend-design skill for aesthetic decisions
-9. It imports `'../theme/colors.dart'` and `'../theme/typography.dart'` -- NOT `'../utils/theme.dart'` (AppTheme)
-10. It has NO emojis anywhere in the UI -- the user explicitly hates emojis in the interface
+Static tokens (same in both modes):
+  NoirColors.crimson      -- #B5363B (warm garnet -- primary accent, CTAs)
+  NoirColors.crimsonDark  -- #9A2F34
+  NoirColors.crimsonDim   -- #B5363B at 15% opacity
+  NoirColors.crimsonGlow  -- #B5363B at 12% opacity
+  NoirColors.hrvColor     -- #4A8C5C (green for HRV)
+  NoirColors.hrColor      -- #B5363B (crimson for HR)
+  NoirColors.sleepColor   -- #666666
 
-### Screens That Don't Exist Yet in the New App
+TYPOGRAPHY -- Use `NoirTypography.xxx`
+Import: `import '../theme/typography.dart';`
 
-If a screen exists in the old app but NOT in the new app:
-1. COPY the old screen file to the new app's `lib/screens/` directory
-2. Then convert it to Noir (same as any other unconverted screen)
-3. Make sure its imports point to the new app's providers/models/services (these are already copied)
+  Headers (Bebas Neue -- uppercase, letterspaced):
+    NoirTypography.displayLarge   -- 56px, w400
+    NoirTypography.displayMedium  -- 42px, w400
+    NoirTypography.greetingName   -- 48px, w400
+    NoirTypography.sectionHeader  -- 16px, w400
 
-### Import Migration Checklist
+  Body (DM Sans):
+    NoirTypography.headlineLarge  -- 20px, w500
+    NoirTypography.headlineMedium -- 18px, w500
+    NoirTypography.headlineSmall  -- 16px, w500
+    NoirTypography.displaySmall   -- 24px, w600
+    NoirTypography.subheadline    -- 17px, w400
+    NoirTypography.bodyLarge      -- 16px, w300
+    NoirTypography.bodyMedium     -- 14px, w400
+    NoirTypography.bodySmall      -- 12px, w400
+    NoirTypography.meta           -- 13px, w400, italic
+    NoirTypography.eyebrow        -- 13px, w600
+    NoirTypography.greeting       -- 13px, w300
 
-When converting a screen, the sub-agent MUST:
-- REMOVE: `import '../utils/theme.dart';` (old AppTheme bridge)
-- ADD: `import '../theme/colors.dart';` (NoirColors)
-- ADD: `import '../theme/typography.dart';` (NoirTypography)
-- REPLACE: All `AppTheme.primaryAccent` -> `NoirColors.crimson`
-- REPLACE: All `AppTheme.backgroundColor` -> `c.background` (where `c = NoirColors.of(context)`)
-- REPLACE: All `AppTheme.textColor` -> `c.text`
-- REPLACE: All `AppTheme.subtitleColor` -> `c.textMuted`
-- REPLACE: All `AppTheme.cardColor` -> `c.cardBg`
-- REPLACE: All `AppTheme.borderColor` -> `c.border`
-- REPLACE: All `BoxShadow(...)` -> `Border.all(color: c.border)`
+  Labels (DM Sans -- uppercase, letterspaced):
+    NoirTypography.labelLarge     -- 14px, w600
+    NoirTypography.labelMedium    -- 12px, w600
+    NoirTypography.labelSmall     -- 11px, w500
+
+  Numbers (Cormorant -- serif):
+    NoirTypography.numberLarge    -- 40px, w700
+    NoirTypography.numberMedium   -- 28px, w600
+    NoirTypography.numberSmall    -- 20px, w600
+    NoirTypography.numberXSmall   -- 15px, w500
+
+ABSOLUTE RULES:
+  1. NO shadows anywhere -- use Border.all(color: c.border) or c.borderMedium
+  2. NO hardcoded colors -- everything via NoirColors.of(context) or NoirColors.xxx
+  3. NO AppTheme references -- remove import '../utils/theme.dart' entirely
+  4. NO emojis in the UI -- user explicitly hates emojis
+  5. NO MockData -- use real Riverpod providers with AsyncValue.when()
+  6. Functionality MUST match the old screen exactly (same taps, navigation, data)
+  7. Use same Riverpod providers, ApiClient, Firebase Auth as old app
+  8. "VETTRA" branding only -- never "STRAVA" or third-party names
+  9. Nav order: [Home] [Activities] RUN [Plans] [AI Coach]
+  10. Card style: c.cardBg background, Border.all(color: c.border), BorderRadius.circular(16)
+
+IMPORT MIGRATION:
+  REMOVE: import '../utils/theme.dart';
+  ADD:    import '../theme/colors.dart';
+  ADD:    import '../theme/typography.dart';
+  REPLACE: AppTheme.primaryAccent -> NoirColors.crimson
+  REPLACE: AppTheme.backgroundColor -> c.background
+  REPLACE: AppTheme.textColor -> c.text
+  REPLACE: AppTheme.subtitleColor -> c.textMuted
+  REPLACE: AppTheme.cardColor -> c.cardBg
+  REPLACE: AppTheme.borderColor -> c.border
+  REPLACE: BoxShadow(...) -> Border.all(color: c.border)
+  REPLACE: Colors.xxx (any Material color) -> appropriate c.xxx token
+=== END DESIGN SYSTEM ===
+```
 
 ---
 
 ## FIRST: Check for Existing Session
 
-Before doing anything else, check if `REDESIGN_TODO.md` exists in the new app root:
-
 ```bash
-ls "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/REDESIGN_TODO.md" 2>/dev/null && echo "RESUME" || echo "NEW SESSION"
+cat "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/REDESIGN_TODO.md" 2>/dev/null && echo "RESUME" || echo "NEW SESSION"
 ```
 
-- **If it exists -> RESUME MODE**: Read `REDESIGN_TODO.md`, find the first unchecked screen, and continue from there. Do NOT restart from scratch.
-- **If it doesn't exist -> NEW SESSION**: Proceed from Phase 0.
+- **RESUME**: Read REDESIGN_TODO.md, find `## NEXT ACTION`, execute it. Do NOT restart.
+- **NEW SESSION**: Proceed from Phase 0.
 
 ---
 
-## Context Budget -- Token Discipline
+## Token Discipline -- The Coordinator's Survival Rules
 
-You are designed to run for hours across multiple sessions. Context exhaustion is expected.
+You are designed to run for hours across multiple sessions. Context exhaustion is expected. These rules keep you alive:
 
-### Rules
-- **Never read a full screen file to check if it's converted.** Use `Grep` for `NoirColors.of` or `AppTheme.` to determine status.
-- **Never read files larger than 300 lines in full.** Use offset/limit.
-- **Delegate all fixes to sub-agents** -- you are a coordinator.
-- **Write findings to REDESIGN_TODO.md** -- don't carry them in context.
-- After each screen conversion+verification, update REDESIGN_TODO.md and commit.
-- If context is getting long: finish current screen, checkpoint, stop. Next session resumes.
+### NEVER do these (they kill your context):
+- NEVER read a screen file (old or new) -- sub-agents read them
+- NEVER read colors.dart, typography.dart, or design-rules.md -- they're embedded above
+- NEVER take Playwright screenshots -- verification agents do that
+- NEVER invoke the frontend-design skill -- conversion agents do that
+- NEVER paste file contents into your own context -- delegate to agents
+- NEVER write Dart code -- sub-agents write all code
+
+### ALWAYS do these (they keep you lean):
+- Use `grep -c "NoirColors.of" [file]` to check conversion status (returns count, not content)
+- Use `grep -c "AppTheme\." [file]` to check if unconverted (returns count, not content)
+- Read ONLY REDESIGN_TODO.md for state (never more than ~100 lines)
+- Write agent results directly to REDESIGN_TODO.md (don't carry them in memory)
+- Checkpoint (update TODO + commit) after every 3 screens
+- After processing 8-10 screens: STOP, checkpoint, let next session continue
+
+### Context exhaustion protocol:
+1. Finish current screen's agent result processing
+2. Update REDESIGN_TODO.md with exact next action
+3. Write current timestamp to "Last updated"
+4. Commit: `git add REDESIGN_TODO.md && git commit -m "chore: redesign checkpoint"`
+5. STOP. The next `/vettra-redesign-marathon` session resumes automatically.
 
 ---
 
-## REDESIGN_TODO.md -- Persistent Session State
+## REDESIGN_TODO.md -- Persistent State File
 
-This file is your external memory. Update it constantly.
+This file is your external brain. A new session reads this to resume instantly.
 
 ### Format
 
@@ -137,653 +220,611 @@ This file is your external memory. Update it constantly.
 **Last updated**: YYYY-MM-DD HH:MM
 
 ## NEXT ACTION (resume here)
-> [Exact next action -- e.g., "Convert activities_screen.dart to Noir aesthetic"]
+> [Exact imperative action -- e.g., "Spawn conversion agent for feed_screen.dart"]
+
+## Phase Checklist
+- [ ] Phase 0 -- Inventory + Environment
+- [ ] Phase 1 -- Widget Conversion (batch)
+- [ ] Phase 2 -- Screen Conversion (sequential)
+- [ ] Phase 3 -- Playwright Deep Verification
+- [ ] Phase 4 -- QA Marathon
+- [ ] Phase 5 -- Final Click-Through + Report
+
+## Widget Conversion Status
+| # | Widget File | Status | Notes |
+|---|------------|--------|-------|
+| 1 | accent_headline.dart | CONVERTED | |
+| 2 | activity_analysis.dart | PENDING | |
 
 ## Screen Conversion Status
-<!-- C = Converted, V = Verified with Playwright, F = Functional parity confirmed -->
-| # | Screen File | C | V | F | Notes |
-|---|------------|---|---|---|-------|
-| 1 | home_feed.dart | x | x | x | Done in prior session |
-| 2 | activities_screen.dart | x | x | x | Done in prior session |
-| 3 | activity_detail_screen.dart | x | | | Converted, needs Playwright test |
-| 4 | ai_trainer_screen.dart | | | | Not started |
-...
+<!-- S=Skipped(already done), C=Converted, V=Verified, F=Failed -->
+| # | Screen File | Status | Notes |
+|---|------------|--------|-------|
+| 1 | home_feed.dart | S | Already Noir |
+| 2 | feed_screen.dart | PENDING | |
 
-## Sub-Agents Spawned
-| Screen | Task ID | Status | Notes |
-|--------|---------|--------|-------|
-| activity_detail_screen.dart | [id] | IN_PROGRESS | Converting to Noir |
+## Issues Log
+| Screen/Widget | Issue | Status | Fix Agent |
+|---------------|-------|--------|-----------|
+| feed_screen.dart | Missing provider import | FIXED | agent-001 |
 
-## Issues Found
-| Screen | Issue | Status | Fix Agent |
-|--------|-------|--------|-----------|
-| home_feed.dart | Recovery ring not showing | FIXED | sub-001 |
+## Progress Log (human-readable)
+[YYYY-MM-DD HH:MM] Session started -- X widgets, Y screens to convert
+[YYYY-MM-DD HH:MM] Widget batch complete: N/N converted
+[YYYY-MM-DD HH:MM] Screen 1: feed_screen.dart -- CONVERTED + VERIFIED
 ```
 
 ---
 
-## Phase 0 -- Project Intelligence & Inventory
+## Phase 0 -- Inventory + Environment Setup
 
-### 0.1 Read Design System
-1. Read `lib/theme/colors.dart` -- understand all NoirColors tokens
-2. Read `lib/theme/typography.dart` -- understand all NoirTypography styles
-3. Read `.claude/rules/design-rules.md` -- absolute design rules
-4. Read any CLAUDE.md files
+### 0.1 Quick Status Scan
 
-### 0.2 Build Screen Inventory
-
-Compare old app screens vs new app screens to determine conversion status:
+Run these grep commands to determine what's already converted vs unconverted. Do NOT read any files.
 
 ```bash
-# Old app screens
-ls "/Users/jakobwredstrom/Desktop/Vetra App/vettra-app/lib/screens/"
+# Converted screens (have NoirColors.of)
+grep -rl "NoirColors.of" "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/lib/screens/" | xargs -I{} basename {} | sort
 
-# New app screens
-ls "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/lib/screens/"
+# Unconverted screens (have AppTheme)
+grep -rl "AppTheme\." "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/lib/screens/" | xargs -I{} basename {} | sort
+
+# Screens with hardcoded Material colors (Colors.xxx)
+grep -rl "Colors\." "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/lib/screens/" | xargs -I{} basename {} | sort
+
+# Same for widgets
+grep -rl "AppTheme\.\|Colors\." "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/lib/widgets/" | xargs -I{} basename {} | sort
 ```
 
-### 0.3 Determine Conversion Status
+### 0.2 Write REDESIGN_TODO.md
 
-For each screen in the new app, check if it's already converted to Noir:
+Create the full inventory with every screen and widget listed. Mark already-converted items as `S` (skip). Commit immediately.
+
+### 0.3 Start Both Apps
+
+Use Desktop Commander (`start_process`) to launch both apps:
 
 ```bash
-# If it uses NoirColors.of(context), it's converted
-grep -l "NoirColors.of" "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/lib/screens/"*.dart
+# Start OLD app on port 3006
+cd "/Users/jakobwredstrom/Desktop/Vetra App/vettra-app" && flutter run -d chrome --web-port=3006 --dart-define=USE_PRODUCTION_URL=true --dart-define=DEV_EMAIL=devqa@segments.app "--dart-define=DEV_PASSWORD=SegmentsDevQA2024!"
 
-# If it uses AppTheme. or hardcoded colors, it's NOT converted
-grep -l "AppTheme\." "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/lib/screens/"*.dart
+# Start NEW app on port 3005
+cd "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend" && flutter run -d chrome --web-port=3005 --dart-define=USE_PRODUCTION_URL=true --dart-define=DEV_EMAIL=devqa@segments.app "--dart-define=DEV_PASSWORD=SegmentsDevQA2024!"
 ```
 
-### 0.4 Priority Order
+Wait for both to compile. Verify with:
+```bash
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3005
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3006
+```
 
-Convert screens in this order (most visible first):
-1. **Home/Feed** -- `home_feed.dart`, `feed_screen.dart`
-2. **Activities** -- `activities_screen.dart`, `activity_detail_screen.dart`
-3. **Plans** -- `training_plans_screen.dart`, `plans_screen.dart`
-4. **AI Coach** -- `ai_trainer_screen.dart`, `ai_coach_screen.dart`
-5. **Profile & Settings** -- `profile_screen.dart`, `settings_screen.dart`, `personal_info_screen.dart`
-6. **Health** -- `health_screen.dart`, `health_insights_screen.dart`, `fitness_dashboard_screen.dart`
-7. **Knowledge** -- `knowledge_hub_screen.dart`, `knowledge_article_screen.dart`
-8. **Races** -- `races_screen.dart`, `race_detail_screen.dart`, `race_edit_screen.dart`
-9. **Workouts** -- `workout_builder_screen.dart`, `workout_execution_screen.dart`, `record_workout_screen.dart`
-10. **Auth/Onboarding** -- `auth_screen.dart`, `onboarding_screen.dart`, `onboarding_splash_screen.dart`
-11. **Everything else** -- remaining screens
+If either app shows onboarding/login, you'll need to click through it once using Playwright before verification agents can test screens.
 
-### 0.5 Write REDESIGN_TODO.md
+### 0.4 Login Both Apps via Playwright
 
-Write the full inventory to `REDESIGN_TODO.md` with status for each screen. Commit immediately.
+Navigate Playwright to each port. If login screen appears:
+1. Look for "Dev login" or similar dev shortcut
+2. Enter password: `SegmentsDevQA2024!`
+3. Click through any onboarding steps
+4. Verify home screen loads
 
 ---
 
-## Phase 1 -- Environment Setup
+## Phase 1 -- Widget Conversion (Batch)
 
-### 1.1 Start Both Apps
+Convert ALL unconverted widgets BEFORE any screens. This eliminates dependency issues.
 
-Start BOTH the old and new apps simultaneously:
+### Widget Priority Order
+Convert in this order (most depended-on first):
+1. `bottom_nav_scaffold.dart` -- used by almost every screen
+2. `shimmer_loading.dart` -- used in loading states
+3. `user_avatar.dart` -- used in profiles, nav
+4. `accent_headline.dart` -- used in section headers
+5. `morning_checkin_card.dart` -- home screen
+6. `today_workout_card.dart` -- home screen
+7. `activity_charts.dart`, `activity_analysis.dart`, `activity_laps_table.dart`, `activity_splits_table.dart`, `activity_map.dart` -- activity detail
+8. `best_efforts_list.dart`, `segment_efforts_list.dart` -- activity detail
+9. `chat_message_widget.dart` -- AI coach
+10. `training_plan_preview.dart`, `phase_timeline.dart`, `week_card.dart`, `week_edit_sheet.dart`, `weekly_progress_bar.dart` -- plans
+11. `knowledge_article_card.dart`, `knowledge_category_card.dart`, `knowledge_chat_sheet.dart` -- knowledge
+12. `health_status_card.dart`, `readiness_score_badge.dart` -- health
+13. `race_countdown_widget.dart` -- races
+14. `difficulty_badge.dart`, `key_takeaways_box.dart` -- misc
+15. `navigation_drawer.dart` -- side menu
+16. All remaining widgets
 
-```bash
-# Start OLD app on port 3006 (reference)
-cd "/Users/jakobwredstrom/Desktop/Vetra App/vettra-app" && flutter run -d chrome --web-port=3006 --dart-define=USE_PRODUCTION_URL=true --dart-define=DEV_EMAIL=devqa@segments.app "--dart-define=DEV_PASSWORD=SegmentsDevQA2024!" &
+### Batch Dispatch Strategy
 
-# Start NEW app on port 3005 (target)
-cd "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend" && flutter run -d chrome --web-port=3005 --dart-define=USE_PRODUCTION_URL=true --dart-define=DEV_EMAIL=devqa@segments.app "--dart-define=DEV_PASSWORD=SegmentsDevQA2024!" &
-```
-
-Use Desktop Commander (`mcp__Desktop_Commander__start_process`) for these -- it allows you to interact with the process later for hot reload.
-
-### 1.2 Verify Both Apps Load
-
-Use Playwright to navigate to both ports and verify they load:
-- `http://localhost:3005` -- new app
-- `http://localhost:3006` -- old app
-
-If either shows the onboarding/login screen, click through it using the dev credentials.
-
-### 1.3 Flutter Hot Reload Strategy
-
-After editing files in the new app, trigger hot reload:
-1. Use `mcp__Desktop_Commander__interact_with_process` to send `r` to the Flutter process
-2. OR use `mcp__Control_your_Mac__osascript` to send keystrokes to the terminal
-3. If neither works, restart the Flutter process
-
-IMPORTANT: Flutter web in debug mode uses CanvasKit. Screenshots work but the accessibility tree (Playwright snapshot) may be empty. Use coordinate-based clicks for Flutter web.
-
----
-
-## Phase 2 -- Screen-by-Screen Conversion (THE MAIN LOOP)
-
-For EACH unconverted screen, follow this exact procedure:
-
-### Step 2.0 -- Pre-Check: Does the Screen Exist? Are Its Widgets Converted?
-
-**A. Check if screen exists in new app:**
-```bash
-ls "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/lib/screens/[screen_name].dart" 2>/dev/null
-```
-If it does NOT exist, copy it from the old app first:
-```bash
-cp "/Users/jakobwredstrom/Desktop/Vetra App/vettra-app/lib/screens/[screen_name].dart" "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/lib/screens/"
-```
-
-**B. Check which widgets this screen depends on:**
-```bash
-grep "import.*widgets/" "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/lib/screens/[screen_name].dart"
-```
-For each imported widget, check if it's already converted:
-```bash
-grep -c "NoirColors.of" "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/lib/widgets/[widget_name].dart"
-```
-If a widget is NOT converted (returns 0), spawn a widget conversion sub-agent FIRST and wait for it before converting the screen.
-
-### Step 2.1 -- Read the Old Screen (Reference)
-
-```
-Read the old app's version of the screen:
-"/Users/jakobwredstrom/Desktop/Vetra App/vettra-app/lib/screens/[screen_name].dart"
-```
-
-Note:
-- Every widget, every tap handler, every navigation target
-- Every provider it uses (`ref.watch`, `ref.read`)
-- Every API call and data model
-- Every interactive element (buttons, cards, swipes, gestures)
-- The overall layout structure
-
-### Step 2.2 -- Read the New Screen (Current State)
-
-```
-Read the new app's version:
-"/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/lib/screens/[screen_name].dart"
-```
-
-Determine:
-- Is it using `NoirColors.of(context)` or hardcoded colors?
-- Is it using `NoirTypography.*` or inline TextStyles?
-- Does it have all the functionality of the old screen?
-- Are there any `MockData` references? (FORBIDDEN)
-- Are shadows present? (MUST be removed)
-
-### Step 2.3 -- Invoke Frontend-Design Skill for Aesthetic Decisions
-
-**CRITICAL: Always invoke the `frontend-design` skill before making aesthetic decisions for a screen that hasn't been designed yet.**
-
-Use the Skill tool:
-```
-Skill: frontend-design
-```
-
-The frontend-design skill provides:
-- Typography choices (which NoirTypography style for what)
-- Color usage (when to use crimson accent, when muted, when surface colors)
-- Spatial composition (padding, spacing, card layout)
-- Motion/transitions (if applicable)
-- How to make the screen feel premium and intentional
-
-You already have the Noir design system. The frontend-design skill helps you apply it with taste and intention -- not mechanically.
-
-### Step 2.4 -- Spawn Conversion Sub-Agent
-
-**ALWAYS delegate the actual code changes to a sub-agent.** This preserves your context window.
+Spawn 2-3 widget conversion agents IN PARALLEL (they edit different files, no conflict):
 
 ```
 Agent tool:
+  description: "Convert widget [name]"
   subagent_type: general-purpose
   run_in_background: true
-  isolation: worktree
+  prompt: [WIDGET CONVERSION PROMPT -- see template below]
+```
+
+After each batch completes, run:
+```bash
+cd "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend" && flutter analyze 2>&1 | tail -30
+```
+
+If errors exist, spawn fix agents. Update REDESIGN_TODO.md after each batch.
+
+### Widget Conversion Agent Prompt Template
+
+```
+You are a Vettra Widget Conversion Agent. Convert ONE widget to the Noir design system.
+
+PROJECT: /Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend
+WIDGET TO CONVERT: lib/widgets/[WIDGET_NAME].dart
+OLD APP REFERENCE: /Users/jakobwredstrom/Desktop/Vetra App/vettra-app/lib/widgets/[WIDGET_NAME].dart
+
+[PASTE THE ENTIRE DESIGN SYSTEM REFERENCE BLOCK FROM ABOVE]
+
+STEPS:
+1. Read the widget file in the NEW app: lib/widgets/[WIDGET_NAME].dart
+2. Read the SAME widget in the OLD app (if it exists) for functional reference
+3. Convert ALL colors to NoirColors.of(context) tokens
+4. Convert ALL text styles to NoirTypography.xxx
+5. Remove ALL shadows -- replace with Border.all(color: c.border)
+6. Remove ALL hardcoded colors (Colors.xxx, Color(0xFFxxxxxx))
+7. Remove import '../utils/theme.dart' -- add imports for colors.dart and typography.dart
+8. Preserve ALL functionality -- every callback, every parameter, every layout
+9. Run: cd "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend" && flutter analyze lib/widgets/[WIDGET_NAME].dart 2>&1 | tail -20
+10. If 0 errors: git add lib/widgets/[WIDGET_NAME].dart && git commit -m "design: convert [WIDGET_NAME] to Noir"
+11. Report: "CONVERTED: [WIDGET_NAME]" or "FAILED: [reason]"
+
+RULES:
+- NO emojis in UI text
+- NO MockData
+- Preserve every parameter, callback, and layout structure
+- Only change colors, text styles, shadows, and imports
+- If a color is semantic (green=good, red=bad), map it to the nearest Noir token:
+  green -> NoirColors.hrvColor (#4A8C5C)
+  red -> NoirColors.crimson (#B5363B)
+  gray -> c.textMuted
+  blue -> c.accent (or NoirColors.crimson for CTAs)
+```
+
+---
+
+## Phase 2 -- Screen Conversion (Sequential, One at a Time)
+
+### Screen Priority Order
+
+Convert in this order (most visible/important first):
+
+**Tier 1 -- Core screens (convert first):**
+1. feed_screen.dart
+2. training_plans_screen.dart
+3. ai_trainer_screen.dart
+4. profile_screen.dart
+5. settings_screen.dart
+
+**Tier 2 -- Important feature screens:**
+6. health_screen.dart
+7. health_insights_screen.dart
+8. fitness_dashboard_screen.dart
+9. knowledge_hub_screen.dart
+10. knowledge_article_screen.dart
+11. races_screen.dart
+12. race_detail_screen.dart
+13. race_edit_screen.dart
+14. personal_info_screen.dart
+15. personal_records_screen.dart
+16. running_profile_screen.dart
+17. morning_checkin_screen.dart
+
+**Tier 3 -- Secondary screens:**
+18. workout_builder_screen.dart
+19. workout_execution_screen.dart
+20. workout_library_screen.dart
+21. workout_summary_screen.dart
+22. record_workout_screen.dart
+23. active_workout_screen.dart
+24. plan_wizard_screen.dart
+25. plan_generation_screen.dart
+26. plan_reveal_screen.dart
+27. coach_evaluation_wizard_screen.dart
+28. intelligence_reveal_screen.dart
+29. squad_screen.dart
+30. squad_detail_screen.dart
+31. squad_invite_screen.dart
+
+**Tier 4 -- Low-priority screens:**
+32. injury_log_screen.dart
+33. connections_screen.dart
+34. connect_device_screen.dart
+35. developer_connections_screen.dart
+36. deals_screen.dart
+37. gear_deals_screen.dart
+38. shoe_deals_screen.dart
+39. data_processing_screen.dart
+40. notification_settings_screen.dart
+41. legal_screen.dart
+42. paywall_screen.dart
+43. audio_settings_screen.dart
+44. whoop_screen.dart
+45. strength_glossary_screen.dart
+
+**Tier 5 -- Auth/Onboarding (convert last -- fragile):**
+46. auth_screen.dart
+47. onboarding_screen.dart
+48. onboarding_splash_screen.dart
+49. onboarding_complete_screen.dart
+50. performance_screen.dart
+
+Skip: home_feed.dart, activities_screen.dart, activity_detail_screen.dart, ai_coach_screen.dart, plans_screen.dart, app_shell.dart (already converted or Noir-native)
+
+### Per-Screen Conversion Loop
+
+For each unconverted screen:
+
+**Step A -- Dispatch Conversion Agent**
+
+```
+Agent tool:
+  description: "Convert [screen_name]"
+  subagent_type: general-purpose
+  run_in_background: false   <-- WAIT for result
   prompt: |
-    You are a Vettra Redesign Sub-Agent. Convert one screen to the Noir aesthetic.
+    You are a Vettra Screen Conversion Agent. Convert one screen to the Noir aesthetic.
 
-    PROJECT ROOT: /Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend
-    SCREEN TO CONVERT: lib/screens/[screen_name].dart
+    PROJECT: /Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend
+    SCREEN: lib/screens/[SCREEN_NAME].dart
+    OLD APP REFERENCE: /Users/jakobwredstrom/Desktop/Vetra App/vettra-app/lib/screens/[SCREEN_NAME].dart
 
-    REFERENCE (old screen -- copy ALL functionality from this):
-    [paste key excerpts or full content of old screen showing providers, navigation, taps]
+    [PASTE THE ENTIRE DESIGN SYSTEM REFERENCE BLOCK]
 
-    DESIGN SYSTEM:
-    - Colors: Use `NoirColors.of(context)` for ALL colors. Import from '../theme/colors.dart'
-    - Typography: Use `NoirTypography.*` for ALL text. Import from '../theme/typography.dart'
-      - Section headers: NoirTypography.sectionHeader (Bebas Neue, uppercase, letterspaced)
-      - Body text: NoirTypography.bodyMedium / .bodyLarge (DM Sans)
-      - Numbers/metrics: NoirTypography.numberLarge / .numberMedium (Cormorant serif)
-      - Labels: NoirTypography.labelLarge / .labelMedium (DM Sans, uppercase)
-      - Meta/detail: NoirTypography.meta (DM Sans italic)
-    - NO shadows -- use borders: Border.all(color: c.border) or c.borderMedium
-    - Card backgrounds: c.cardBg or c.surface2
-    - Page background: c.background
-    - Accent color: NoirColors.crimson (for CTAs, highlights, active states)
-    - Text colors: c.text (primary), c.textMuted (secondary), c.textFaint (tertiary)
+    YOUR PROCESS:
+    1. Read the OLD screen file (in vettra-app) -- this is the source of truth for functionality
+       Note every: provider (ref.watch/ref.read), navigation (Navigator.push), tap handler, API call, data model
+    2. Read the NEW screen file (in vettra-newfrontend) -- this is what you're converting
+    3. IMPORTANT: Before you start converting, invoke the frontend-design skill (use the Skill tool with skill: "frontend-design") to get aesthetic guidance for this specific screen. Describe the screen's purpose and content, and ask how to apply the Noir design system with taste and intention. Follow its guidance for spatial composition, typography hierarchy, and color usage.
+    4. Rewrite the screen:
+       - Replace ALL AppTheme.xxx and hardcoded colors with NoirColors tokens
+       - Replace ALL inline TextStyle/GoogleFonts with NoirTypography.xxx
+       - Remove ALL BoxShadow -- use Border.all(color: c.border)
+       - Remove import '../utils/theme.dart' -- add theme/colors.dart + theme/typography.dart
+       - Apply the frontend-design guidance for layout, spacing, visual hierarchy
+       - KEEP every provider, every navigation, every tap handler, every API call IDENTICAL
+    5. Run: cd "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend" && flutter analyze lib/screens/[SCREEN_NAME].dart 2>&1 | tail -20
+    6. Fix any analysis errors
+    7. Run flutter analyze again -- must be 0 errors
+    8. git add lib/screens/[SCREEN_NAME].dart && git commit -m "design: convert [SCREEN_NAME] to Noir aesthetic"
+    9. Report: "CONVERTED: [SCREEN_NAME]" with a 2-sentence summary of what changed
+       OR: "FAILED: [reason]" if you couldn't complete the conversion
 
     ABSOLUTE RULES:
-    1. EVERY tap, button, navigation from the old screen MUST work identically
+    1. Every tap, button, navigation from the old screen MUST work identically
     2. Use the SAME Riverpod providers as the old screen
-    3. NO MockData -- use real providers with AsyncValue.when(loading:, error:, data:)
+    3. NO MockData -- real providers with AsyncValue.when(loading:, error:, data:)
     4. NO shadows -- 6% opacity borders only
-    5. NO hardcoded colors -- everything via NoirColors.of(context)
-    6. Replace any "STRAVA" text with "VETTRA"
-    7. Maintain ConsumerStatefulWidget / ConsumerWidget pattern
-    8. NO EMOJIS in the UI -- the user explicitly hates emojis. Remove any emoji from display text.
-    9. REMOVE `import '../utils/theme.dart'` (old AppTheme) -- replace with `import '../theme/colors.dart'` and `import '../theme/typography.dart'`
-    10. All `AppTheme.xxx` references must be replaced with `NoirColors` / `NoirTypography` equivalents
+    5. NO hardcoded colors
+    6. NO emojis in UI text
+    7. Replace any "STRAVA" with "VETTRA"
+    8. Maintain ConsumerStatefulWidget / ConsumerWidget pattern
+    9. If the screen imports widgets from lib/widgets/, those should already be converted to Noir (they were done in Phase 1). Use NoirColors/NoirTypography in any widget references.
+    10. Common pattern: `final c = NoirColors.of(context);` at top of build method
+```
 
-    AESTHETIC GUIDANCE:
-    [Insert specific aesthetic notes from frontend-design skill invocation]
+**Step B -- Process Result**
+
+If agent reports CONVERTED:
+1. Quick verify: `grep -c "NoirColors.of" [file]` should return > 0
+2. Quick verify: `grep -c "AppTheme\." [file]` should return 0
+3. Update REDESIGN_TODO.md: mark screen as `C` (Converted)
+
+If agent reports FAILED:
+1. Log the failure reason in REDESIGN_TODO.md Issues Log
+2. Spawn a fix agent with the specific error
+3. If fix agent also fails: mark as `NEEDS_MANUAL` and move on (max 2 retries per screen)
+
+**Step C -- Dispatch Verification Agent**
+
+After successful conversion, spawn a verification agent:
+
+```
+Agent tool:
+  description: "Verify [screen_name]"
+  subagent_type: general-purpose
+  run_in_background: true   <-- Run in background, continue to next screen
+  prompt: |
+    You are a Vettra Verification Agent. Test a converted screen using Playwright.
+
+    WHAT TO TEST: [SCREEN_NAME] on http://localhost:3005
+    COMPARE WITH: Same screen on http://localhost:3006 (old app)
+
+    Flutter web renders via CanvasKit (canvas). Playwright's accessibility tree may be empty.
+    Use COORDINATE-BASED CLICKS (page.mouse.click(x, y)) for Flutter web.
+    Wait 5-8 seconds after navigation for Flutter to fully render.
 
     STEPS:
-    1. Read the current new screen file
-    2. Read the old screen file for functional reference
-    3. Rewrite the screen with Noir aesthetic while preserving ALL functionality
-    4. Run: flutter analyze lib/screens/[screen_name].dart
-    5. If 0 errors: git add lib/screens/[screen_name].dart && git commit -m "design: convert [screen_name] to Noir aesthetic"
-    6. Report: "CONVERTED: [screen_name].dart" or "FAILED: [reason]"
+    1. Navigate Playwright to http://localhost:3005
+    2. Wait 6 seconds for Flutter to load
+    3. Navigate to the [SCREEN_NAME] screen:
+       [PROVIDE NAVIGATION INSTRUCTIONS -- e.g., "Click Activities tab at bottom nav, coordinates approximately (x, y)"]
+    4. Take a screenshot with browser_take_screenshot
+    5. Evaluate the screenshot:
+       - Does the screen render without crashing? (not blank/white)
+       - Are there obvious old-design remnants (bright blue, Material shadows, wrong fonts)?
+       - Is text readable? Are colors consistent with dark/light theme?
+       - Does the layout look intentional and premium?
+    6. Click 2-3 interactive elements on the screen (cards, buttons) using coordinate-based clicks
+    7. After each click, wait 1-2 seconds and take another screenshot
+    8. Verify navigation targets loaded correctly
+    9. Check browser console for errors: browser_console_messages
+    10. Now navigate to http://localhost:3006 (old app), go to the same screen
+    11. Take a screenshot for comparison
+    12. Verify: does the new screen show the same data/content as the old?
+    13. Report:
+        "VERIFIED: [SCREEN_NAME] -- renders correctly, N/N interactive elements work, matches old app"
+        OR "ISSUES_FOUND: [SCREEN_NAME] -- [list each issue]"
+
+    LOGIN: If app shows login screen:
+    - Look for "Dev login" button
+    - Enter password: SegmentsDevQA2024!
+    - Click through any onboarding
+
+    RULES:
+    - Never ask questions
+    - Take at most 5 screenshots total (to conserve context)
+    - Focus on: does it render? does it crash? do clicks work? does data load?
 ```
 
-### Step 2.5 -- Verify with Playwright (After Sub-Agent Completes)
+**Step D -- Process Verification Result**
 
-After the conversion sub-agent reports back, verify the screen with Playwright.
+When verification agent reports back (may be background):
+- VERIFIED: Update REDESIGN_TODO.md, mark screen as `V`
+- ISSUES_FOUND: Spawn fix agents for each issue, then re-verify
 
-**IMPORTANT: Playwright controls ONE browser page at a time.** To compare old and new apps:
-- Navigate to port 3005 (new app), test, take screenshot
-- Then navigate to port 3006 (old app), test, take screenshot
-- Compare results mentally (you can see both screenshots)
+**Step E -- Checkpoint**
 
-**IMPORTANT: After code changes, restart the Flutter process.** Flutter web hot reload is unreliable. Kill the old process and start a new one:
-```bash
-# Kill old process, start new
-kill [PID] && cd "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend" && flutter run -d chrome --web-port=3005 ...
-```
-Wait 6-8 seconds after navigation for Flutter to fully render before taking screenshots.
+After every 3 screens:
+1. Update REDESIGN_TODO.md with all results
+2. Run: `cd "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend" && flutter analyze 2>&1 | tail -20`
+3. If errors: spawn fix agent
+4. Commit: `git add REDESIGN_TODO.md && git commit -m "chore: redesign checkpoint -- N/M screens done"`
+5. Append to Progress Log in REDESIGN_TODO.md
 
-#### A. Visual Check -- USE FRONTEND-DESIGN SKILL TO EVALUATE
-
-1. Navigate Playwright to `http://localhost:3005`
-2. Navigate to the converted screen (click through nav)
-3. Take a screenshot with `browser_take_screenshot`
-4. **Invoke the `frontend-design` skill to evaluate the screenshot:**
-   - Does it look premium and intentional?
-   - Are the colors correct (dark bg, cream text, crimson accents)?
-   - Is the typography hierarchy right (Bebas headers, DM Sans body, Cormorant numbers)?
-   - Are there any jarring elements (white cards on dark bg, bright colors that don't belong)?
-   - Does the spatial composition feel balanced and generous?
-   - Are there any leftover old-design elements (shadows, wrong fonts, hardcoded colors)?
-5. If the frontend-design evaluation finds issues -> SPAWN FIX SUB-AGENT with specific aesthetic fixes
-
-#### B. Functional Parity Check (New App -- port 3005)
-1. Navigate to the converted screen
-2. Click every interactive element (cards, buttons, rows, tabs) using coordinate-based clicks
-3. After each click, take a screenshot to verify the navigation target loaded correctly
-4. Verify data is loading from API (text visible, not blank, not "Loading..." stuck)
-5. Check: do tappable cards navigate to the right detail screens?
-6. Check: do back buttons work?
-7. Check: do tabs switch content correctly?
-
-#### C. Compare with Old App (port 3006)
-1. Navigate Playwright to `http://localhost:3006`
-2. Navigate to the SAME screen in the old app
-3. Take a screenshot for reference
-4. Click the SAME interactive elements in the same order
-5. Verify IDENTICAL behavior: same navigation targets, same data shown, same number of items
-6. If behavior differs -> log the difference and SPAWN FIX SUB-AGENT
-
-#### D. Check Console for Errors
-Use `browser_console_messages` or check the Flutter process output for:
-- Dart assertion errors (e.g., `Assertion failed`, `RangeError`)
-- API errors (e.g., `HTTP 500`, `Failed to load resource`)
-- Rendering errors (e.g., `EXCEPTION CAUGHT BY WIDGETS LIBRARY`)
-- Widget overflow errors (e.g., `RenderFlex overflowed`)
-
-Any error = SPAWN FIX SUB-AGENT immediately.
-
-#### E. Run `flutter analyze` on the Whole Project (every 3-5 screens)
-
-```bash
-cd "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend" && flutter analyze 2>&1 | tail -20
-```
-
-If there are errors in ANY file (not just the screen you converted), spawn a fix sub-agent.
-
-### Step 2.6 -- Update REDESIGN_TODO.md
-
-Mark the screen as:
-- `C` = Converted (code changed)
-- `V` = Visually verified (Playwright screenshot looks correct)
-- `F` = Functionally verified (all taps/navigation work, matches old app)
-
-Commit the update.
-
-### Step 2.7 -- Move to Next Screen
-
-Repeat Steps 2.1-2.6 for the next unconverted screen. NEVER stop.
+After 8-10 screens: SERIOUSLY consider stopping (update NEXT ACTION and let next session continue). Context health > completing one more screen.
 
 ---
 
-## Phase 3 -- Widget Conversion (Inline + Catch-Up)
+## Phase 3 -- Playwright Deep Verification (Full Walkthrough)
 
-Widgets are converted in TWO ways:
+After ALL screens are converted, do a comprehensive walkthrough. Spawn ONE large verification agent:
 
-### 3A. Inline During Screen Conversion (preferred)
-When converting a screen, check which widgets it imports. If any widget still uses `AppTheme`, convert it FIRST (spawn a sub-agent for the widget before the screen). The screen conversion sub-agent should reference the already-converted widget.
-
-Before converting any screen, run:
-```bash
-# Find which widgets the screen imports
-grep "import.*widgets/" "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/lib/screens/[screen_name].dart"
-# Then check if those widgets are converted
-grep -l "AppTheme\." [each widget file found above]
 ```
+Agent tool:
+  description: "Full app walkthrough"
+  subagent_type: general-purpose
+  run_in_background: false
+  prompt: |
+    You are a Vettra Full Walkthrough Agent. Test the entire app using Playwright.
 
-### 3B. Catch-Up Sweep (after all screens)
-After all screens are done, sweep for any remaining unconverted widgets:
+    NEW APP: http://localhost:3005
+    OLD APP: http://localhost:3006
 
-```bash
-grep -rl "AppTheme\." "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend/lib/widgets/"
+    Flutter web uses CanvasKit -- use coordinate-based clicks, wait 5-8s after navigation.
+
+    TEST EVERY TAB:
+    1. Home tab -- verify cards load, content visible
+    2. Activities tab -- verify list loads, tap first activity -> detail screen loads
+    3. RUN button (center) -- verify it opens workout/run screen
+    4. Plans tab -- verify plan loads or empty state
+    5. AI Coach tab -- verify chat interface loads
+
+    TEST KEY USER FLOWS:
+    1. Home -> tap activity card -> activity detail (charts, stats, map visible)
+    2. Home -> morning check-in card interaction
+    3. Activities -> tap activity -> detail -> back -> still on activities
+    4. Plans -> tap plan -> plan detail
+    5. Profile (via nav drawer or settings icon) -> settings load
+    6. Knowledge hub (if accessible) -> tap article -> article renders
+
+    FOR EACH FLOW:
+    - Screenshot the key screens (max 15 screenshots total)
+    - Do the SAME flow in old app (port 3006) -- verify same behavior
+    - Log any differences
+
+    Invoke the frontend-design skill to evaluate 3-4 key screenshots (home, activity detail, plans, AI coach) for aesthetic quality.
+
+    REPORT FORMAT:
+    WALKTHROUGH COMPLETE
+    Screens tested: N
+    Flows tested: N
+    Issues found: N
+    [List each issue with screen name and description]
+    Aesthetic evaluation: [summary from frontend-design]
 ```
-
-For each unconverted widget, spawn a sub-agent (same pattern as screens).
-
-Key widgets to prioritize if not yet converted:
-- `bottom_nav.dart` / `bottom_nav_scaffold.dart` -- navigation (likely already done)
-- `morning_checkin_card.dart` -- home screen
-- `today_workout_card.dart` -- home screen
-- `activity_charts.dart` -- activity detail (chart colors must use NoirColors)
-- `training_plan_preview.dart` -- plans
-- `chat_message_widget.dart` -- AI coach
-- `navigation_drawer.dart` / `nav_drawer.dart` -- side menu
 
 ---
 
-## Phase 4 -- Full App Walkthrough (Post-Conversion QA)
+## Phase 4 -- QA Marathon
 
-After ALL screens are converted, do a complete app walkthrough with Playwright:
-
-### 4.1 Navigate Every Tab
-1. Home -> verify content loads, cards are tappable
-2. Activities -> verify list loads, items navigate to detail
-3. Plans -> verify plan loads or empty state shows
-4. AI Coach -> verify chat interface loads
-
-### 4.2 Test Key User Flows
-1. **View activity detail**: Home -> tap activity card -> verify detail screen loads with charts, stats, map
-2. **Navigate to races**: Home -> tap race card -> verify races screen
-3. **Morning check-in**: Home -> interact with check-in card -> verify it submits
-4. **View profile**: Hamburger menu -> Profile -> verify settings load
-5. **Knowledge hub**: Navigate to knowledge -> tap article -> verify article renders
-
-### 4.3 Compare Side-by-Side with Old App
-For each flow above, do the same in the old app (port 3006) and verify identical behavior.
-
----
-
-## Phase 5 -- QA Marathon
-
-When all screens are converted and the walkthrough passes, invoke the QA Marathon skill:
+When walkthrough passes, invoke the QA Marathon skill:
 
 ```
 Skill: qa-marathon
 ```
 
-This runs the full autonomous QA session across the entire new app, finding any remaining bugs, crashes, or issues.
+This runs the full autonomous QA session. Let it complete fully.
 
 ---
 
-## Phase 6 -- Final Full Click-Through
+## Phase 5 -- Final Click-Through + Report
 
-After QA Marathon completes, do one final comprehensive click-through:
+### 5.1 Final Verification
 
-### 6.1 Start Both Apps
-Ensure both old (3006) and new (3005) are running.
+Spawn one last walkthrough agent (same as Phase 3) to confirm everything still works after QA fixes.
 
-### 6.2 Systematic Click-Through
-Navigate through EVERY screen in the new app:
-1. Take a screenshot of each screen
-2. Click every button, card, tab, and interactive element
-3. Verify navigation works
-4. Compare behavior with old app on port 3006
-5. Log any discrepancies to REDESIGN_TODO.md
+### 5.2 Final Report
 
-### 6.3 Final Report
-Write a `REDESIGN_COMPLETE.md` in the project root:
+Write `REDESIGN_COMPLETE.md` in the project root:
+
 ```markdown
 # Vettra Redesign -- Completion Report
 
 **Completed**: YYYY-MM-DD HH:MM
-**Screens converted**: N/N
-**Screens verified**: N/N
+**Total screens**: N (M converted, K already Noir, J skipped/manual)
+**Total widgets**: N (M converted, K already Noir)
 **Issues found and fixed**: N
-**Remaining issues**: N (list)
+**Remaining issues**: N
 
-## Screen-by-Screen Status
-[full table from REDESIGN_TODO.md]
+## Screen Status
+[Full table from REDESIGN_TODO.md]
+
+## Aesthetic Evaluation
+[Summary from frontend-design evaluations]
 
 ## Known Limitations
-[any screens that couldn't be fully converted and why]
+[Any screens that need manual attention]
 ```
+
+Commit and update REDESIGN_TODO.md with Phase 5 complete.
 
 ---
 
-## Multi-Agent Operating Model
+## Fix Agent Template
 
-### Conversion Sub-Agent (one per screen)
-- Receives: screen file path, old screen reference, design system rules
-- Makes the conversion (reads old, rewrites new with Noir)
-- Runs `flutter analyze`
-- Commits the change
-- Reports: CONVERTED or FAILED
-
-### Fix Sub-Agent (one per bug)
-- Receives: specific bug location and description
-- Makes minimal fix
-- Runs `flutter analyze`
-- Commits and reports
-
-### Quick-Spawn Template for Fix Sub-Agent
+Use this whenever a bug is found (by any phase):
 
 ```
 Agent tool:
+  description: "Fix [brief description]"
   subagent_type: general-purpose
   run_in_background: true
-  isolation: worktree
   prompt: |
-    You are a Fix Sub-Agent for the Vettra redesign.
+    You are a Fix Agent for the Vettra redesign.
     PROJECT: /Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend
 
     BUG:
     - File: [path]
     - Description: [what's wrong]
     - Expected: [what should happen]
-    - Fix: [suggested change]
+    - Suggested fix: [specific change]
 
     STEPS:
     1. Read the file
-    2. Make the minimal fix
-    3. Run: flutter analyze [file]
-    4. git add [file] && git commit -m "fix: [description]"
-    5. Report: FIXED or FAILED
+    2. Make the MINIMAL fix (only change what's broken)
+    3. Run: flutter analyze [file] 2>&1 | tail -10
+    4. If 0 errors: git add [file] && git commit -m "fix: [description]"
+    5. Report: "FIXED: [what changed]" or "FAILED: [reason]"
 
-    RULES: Never ask questions. Minimal changes only.
+    RULES: Never ask questions. Minimal changes only. No refactoring.
 ```
 
 ---
 
-## Flutter Web + Playwright Testing Notes
+## Flutter Web + Playwright Notes
 
-Flutter web renders to a canvas (CanvasKit mode). This means:
+Flutter web renders to a **canvas** (CanvasKit mode):
 
-1. **Playwright's accessibility snapshot may be empty** -- Flutter has its own semantics layer
-2. **Use coordinate-based clicks** (`page.mouse.click(x, y)`) for interacting with Flutter web
-3. **Screenshots DO work** -- use `browser_take_screenshot` to capture the canvas
-4. **Wait for Flutter to load** -- Flutter web takes 3-8 seconds to initialize. After navigation, wait at least 5 seconds before screenshotting.
-5. **Enable semantics** -- click the `flt-semantics-placeholder` button if visible (or dismiss it)
-6. **Hot reload** -- after editing files, either:
-   - Send `r` to the Flutter process stdin via Desktop Commander
-   - Reload the browser page (may need full page reload for web)
-   - Restart the Flutter process if hot reload doesn't pick up changes
+1. Playwright accessibility tree is usually EMPTY for Flutter -- don't rely on `browser_snapshot`
+2. Use **coordinate-based clicks**: `page.mouse.click(x, y)`
+3. **Screenshots DO work** -- use `browser_take_screenshot`
+4. Wait **5-8 seconds** after navigation for Flutter to render
+5. **Hot reload is unreliable** for Flutter web -- restart the Flutter process after code changes:
+   ```bash
+   # Kill old process
+   kill [PID]
+   # Start new
+   cd "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend" && flutter run -d chrome --web-port=3005 ...
+   ```
+6. After restarting, wait for compilation + initial render (can take 30-60 seconds)
 
-### Playwright Testing Pattern for Flutter Web
-
-```javascript
-// Navigate
-await page.goto('http://localhost:3005');
-await page.waitForTimeout(6000); // Wait for Flutter
-
-// Screenshot
-await page.screenshot({ path: 'screen.png', type: 'png' });
-
-// Click by coordinates (find from screenshot)
-await page.mouse.click(250, 400);
-await page.waitForTimeout(1000);
-
-// Scroll
-await page.mouse.wheel(0, 300);
-
-// Type (after clicking a text field)
-await page.keyboard.type('some text');
-```
-
-### Login Flow for Playwright
-
-If the app shows the onboarding/login screen:
-1. Click through splash pages ("Get started")
-2. Click "Dev login" at the bottom of the login screen
-3. Enter password in the modal: `SegmentsDevQA2024!`
+### Playwright Login Flow
+If the app shows onboarding/login:
+1. Click through splash pages ("Get started" or "Next")
+2. Click "Dev login" at bottom of login screen
+3. Enter password: `SegmentsDevQA2024!`
 4. Click "Sign in"
 5. If onboarding appears, click through all steps (select defaults, click NEXT)
 
----
+### Navigation Coordinates (approximate, for 1280x800 viewport)
+- Home tab: (128, 760)
+- Activities tab: (320, 760)
+- RUN button: (640, 740)
+- Plans tab: (960, 760)
+- AI Coach tab: (1152, 760)
+- First card on any list: (640, 300)
+- Back button (top-left): (40, 40)
+- Settings/menu (top-right): (1240, 40)
 
-## Screen Inventory (Complete List)
-
-### Old App Screens (51 files in vettra-app/lib/screens/)
-```
-active_workout_screen.dart
-activities_screen.dart
-activity_detail_screen.dart
-ai_trainer_screen.dart
-audio_settings_screen.dart
-auth_screen.dart
-coach_evaluation_wizard_screen.dart
-connect_device_screen.dart
-connections_screen.dart
-data_processing_screen.dart
-deals_screen.dart
-developer_connections_screen.dart
-feed_screen.dart
-fitness_dashboard_screen.dart
-gear_deals_screen.dart
-health_insights_screen.dart
-health_screen.dart
-injury_log_screen.dart
-intelligence_reveal_screen.dart
-knowledge_article_screen.dart
-knowledge_hub_screen.dart
-legal_screen.dart
-morning_checkin_screen.dart
-notification_settings_screen.dart
-onboarding_complete_screen.dart
-onboarding_screen.dart
-onboarding_splash_screen.dart
-paywall_screen.dart
-performance_screen.dart
-personal_info_screen.dart
-personal_records_screen.dart
-plan_generation_screen.dart
-plan_reveal_screen.dart
-plan_wizard_screen.dart
-profile_screen.dart
-race_detail_screen.dart
-race_edit_screen.dart
-races_screen.dart
-record_workout_screen.dart
-running_profile_screen.dart
-settings_screen.dart
-shoe_deals_screen.dart
-squad_detail_screen.dart
-squad_invite_screen.dart
-squad_screen.dart
-strength_glossary_screen.dart
-training_plans_screen.dart
-whoop_screen.dart
-workout_builder_screen.dart
-workout_execution_screen.dart
-workout_library_screen.dart
-workout_summary_screen.dart
-```
-
-### New App Additional Screens (in vettra-newfrontend but not in old)
-```
-home_feed.dart (replaces feed_screen.dart as the Noir home page)
-app_shell.dart (main app shell with bottom nav)
-ai_coach_screen.dart (Noir version of AI trainer)
-plans_screen.dart (Noir version of training plans)
-```
-
-### Shared Widgets to Convert
-```
-bottom_nav.dart / bottom_nav_scaffold.dart
-morning_checkin_card.dart
-today_workout_card.dart
-activity_charts.dart
-activity_laps_table.dart
-activity_splits_table.dart
-activity_map.dart
-activity_analysis.dart
-best_efforts_list.dart
-segment_efforts_list.dart
-training_plan_preview.dart
-chat_message_widget.dart
-phase_timeline.dart
-race_countdown_widget.dart
-week_card.dart
-week_edit_sheet.dart
-weekly_progress_bar.dart
-knowledge_article_card.dart
-knowledge_category_card.dart
-knowledge_chat_sheet.dart
-knowledge_daily_insight_card.dart
-health_status_card.dart
-readiness_score_badge.dart
-shimmer_loading.dart
-user_avatar.dart
-navigation_drawer.dart / nav_drawer.dart
-difficulty_badge.dart
-film_grain.dart (already Noir-specific)
-```
+These are approximate -- verification agents should take a screenshot first and adjust coordinates based on actual layout.
 
 ---
 
 ## Operating Principles
 
-**Never stop early.** If there are 50 screens, convert all 50. If Playwright finds a bug, spawn a fix agent and keep going.
+**You are a dispatcher, not a worker.** Your context is precious. Every file you read, every screenshot you process, every line of code you write is wasted coordinator context. Sub-agents have fresh context -- use it.
 
-**Never ask questions.** Read the old app's code to understand intent. Read the design system to understand aesthetics. If truly ambiguous, use your best judgment.
+**Never stop early.** If there are 50 screens, dispatch 50 conversion agents. If a screen fails, log it and move on.
 
-**You are a coordinator, not a lone worker.** Spawn sub-agents for all code changes. Your job is to read, plan, verify, and coordinate.
+**Never ask questions.** If ambiguous, make the best decision and log it.
 
-**Spawn sub-agents immediately.** Don't accumulate screens to convert later. Convert each screen as you reach it.
+**Spawn agents immediately.** Don't plan 10 screens ahead -- dispatch the next one as soon as the current one finishes.
 
-**Always verify with Playwright.** A screen is not done until you've taken a screenshot AND clicked through it.
+**Checkpoint religiously.** REDESIGN_TODO.md is your lifeline. Update it after every screen. Commit after every 3 screens.
 
-**Always compare with the old app.** The old app on port 3006 is the functional truth. The new app must behave identically.
+**Max 2 retries per screen.** If conversion + 2 fix attempts fail, mark NEEDS_MANUAL and move on. Don't waste context on one stubborn screen.
 
-**Invoke frontend-design skill for aesthetic decisions.** You have the design system (colors, typography). The frontend-design skill tells you HOW to apply them with taste.
+**Widget-first, screen-second.** Phase 1 (widgets) MUST complete before Phase 2 (screens) begins. This eliminates 90% of dependency issues.
 
-**Preserve all functionality.** You are changing DESIGN ONLY -- colors, fonts, layout, spacing, visual styling. Every provider, every API call, every navigation target stays the same.
+**Background verification, foreground conversion.** Conversion agents run in foreground (you need their result). Verification agents run in background (you can start the next conversion while verification happens).
 
-**Context checkpoint frequently.** After every 2-3 screens, update REDESIGN_TODO.md and commit. If context is getting long, stop gracefully -- the next session will resume.
+**8-10 screens per session is realistic.** Don't try to heroically fit 50 screens in one session. Context exhaustion after 8-10 is expected and handled by REDESIGN_TODO.md.
 
 ---
 
-## When to Stop
+## Recovery Scenarios
 
-You stop when ALL of these are true:
-1. Every screen in the inventory is marked C+V+F (Converted, Visually verified, Functionally verified)
-2. Every shared widget is converted to Noir
-3. QA Marathon has been run (Phase 5)
-4. Final click-through completed (Phase 6)
-5. `REDESIGN_COMPLETE.md` written and committed
-6. No outstanding crashes or assertion errors in the app
+### Flutter process dies
+```bash
+# Find and kill stale Flutter processes
+ps aux | grep flutter | grep -v grep | awk '{print $2}' | xargs kill 2>/dev/null
+# Restart
+cd "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend" && flutter run -d chrome --web-port=3005 --dart-define=USE_PRODUCTION_URL=true --dart-define=DEV_EMAIL=devqa@segments.app "--dart-define=DEV_PASSWORD=SegmentsDevQA2024!"
+```
 
-**Context window exhaustion is expected.** When context is getting long:
-1. Finish the current screen verification
-2. Update REDESIGN_TODO.md with exact next action
-3. Commit
-4. Stop -- the next `/vettra-redesign-marathon` invocation resumes automatically
+### Conversion agent breaks the app (flutter analyze has errors)
+```bash
+# Revert the broken file
+cd "/Users/jakobwredstrom/Desktop/Vetra App/vettra-newfrontend" && git checkout -- lib/screens/[broken_file].dart
+# Re-run flutter analyze to confirm clean
+flutter analyze 2>&1 | tail -10
+```
+
+### Sub-agent returns FAILED
+1. Read the failure reason (it's in the agent result -- don't read files)
+2. Spawn a fix agent with the specific error message
+3. If fix agent also fails: mark NEEDS_MANUAL in REDESIGN_TODO.md
+4. Move to next screen
+
+### Context getting long
+You'll feel it: responses get slower, tool calls take longer. When you notice:
+1. STOP converting new screens
+2. Process any pending verification agent results
+3. Update REDESIGN_TODO.md with exact NEXT ACTION
+4. Commit
+5. STOP
+
+---
+
+## When to Stop (the session, not the marathon)
+
+**Stop this session when ANY of these are true:**
+- You've processed 8-10 screens and context feels heavy
+- A tool call times out or returns truncated results
+- You notice yourself re-reading REDESIGN_TODO.md multiple times (sign of context pressure)
+
+**The marathon is COMPLETE when ALL of these are true:**
+1. Every screen marked C+V in REDESIGN_TODO.md (or NEEDS_MANUAL with explanation)
+2. Every widget converted
+3. Phase 3 walkthrough passed
+4. Phase 4 QA marathon passed
+5. Phase 5 final report written
+6. `REDESIGN_COMPLETE.md` committed
